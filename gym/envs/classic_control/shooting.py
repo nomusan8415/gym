@@ -10,6 +10,7 @@ import gym
 from gym import spaces
 from gym.utils import seeding
 import numpy as np
+import socket
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +33,17 @@ class CartPoleEnv(gym.Env):
 
         self.frameskip = frameskip
         self._seed()
-        self.viewer = None
         self.state = None
 
         self.steps_beyond_done = None
+        self.data = None
+
+        #ソケット作成
+        self.s = socket.socket()
+        self.port = 11451
+        self.s.bind(('', port))
+        self.s.listen(5)
+        self.c, self.addr = self.s.accept()
 
     def _seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -52,35 +60,49 @@ class CartPoleEnv(gym.Env):
             num_steps = self.np_random.randint(self.frameskip[0], self.frameskip[1])
         for _ in range(num_steps):
             #num_stepsだけ同じ行動を繰り返す
+            self.c.send("2")
+            #action送信
+            self.c.send(action)
 
-        done = bool(done)
+        #生存チェック 生きてたら1 死んでたら-1
+        #そのまま報酬
+        done = int(self._get_done())
+        reward = int(done)
+        ob = self._get_obs()
 
-        if not done:
-            reward = 1.0
-        elif self.steps_beyond_done is None:
-            # Pole just fell!
-            self.steps_beyond_done = 0
-            reward = 1.0
-        else:
-            if self.steps_beyond_done == 0:
-                logger.warning("You are calling 'step()' even though this environment has already returned done = True. You should always call 'reset()' once you receive 'done = True' -- any further steps are undefined behavior.")
-            self.steps_beyond_done += 1
-            reward = 0.0
-
-        return np.array(self.state), reward, done, {}
+        return ob, reward
 
     def _get_obs(self):
         #画像取ってくる
-        #return image
+        self.c.send("1")
+        self.data = self.c.recv(1024).strip()
+        self.c.send("1")
+        buf=''
+        recvlen=0
+        while recvlen<int(self.data):
+                receivedstr=self.request.recv(1024*1024)
+                recvlen+=len(receivedstr)
+                buf +=receivedstr
+        image=np.fromstring(buf,dtype='uint8')
+
+        return image
 
     def _reset(self):
         self.steps_beyond_done = None
-        return self._get_obs()
 
-    def _render(self, mode='human', close=False):
+        #初期化処理
+        self.c.send("4")
+        while true :
+            if self.c.recv(1024).strip() == "1":
+                break
+        return self._get_obs()
 
     def get_action_meanings(self):
         return [ACTION_MEANING[i] for i in self._action_set]
+
+    def _get_done(self):
+        self.c.send("3")
+        return self.c.recv(1024).strip()
 
 
 
