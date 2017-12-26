@@ -67,10 +67,10 @@ class CartPoleEnv(gym.Env):
         #生存チェック 生きてたら1 死んでたら-1
         #そのまま報酬
         done = int(self._get_done())
-        reward = int(done)
+        reward = done
         ob = self._get_obs()
 
-        return ob, reward
+        return ob, reward, done
 
     def _get_obs(self):
         #画像取ってくる
